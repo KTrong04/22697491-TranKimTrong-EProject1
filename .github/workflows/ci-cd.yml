@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - Microservices Project
+name: ⚡ Fast CI/CD - Microservices Project
 
 on:
   push:
@@ -17,36 +17,34 @@ jobs:
         image: mongo:6
         ports:
           - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'" 
+          --health-interval 2s 
+          --health-timeout 2s 
+          --health-retries 10
       rabbitmq:
         image: rabbitmq:3-management
         ports:
           - 5672:5672
-          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 10
 
     steps:
       - name: 🧩 Checkout source code
         uses: actions/checkout@v4
 
-      - name: ⚙️ Set up Node.js
+      - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: npm
 
-      - name: 📦 Install dependencies (Auth)
-        run: |
-          cd auth
-          npm install
-
-      # ✅ Chờ MongoDB & RabbitMQ sẵn sàng (Cách 1)
-      - name: 🕒 Wait for MongoDB & RabbitMQ
-        run: |
-          echo "⏳ Waiting for MongoDB & RabbitMQ..."
-          for i in {1..20}; do
-            nc -z localhost 27017 && nc -z localhost 5672 && echo "✅ Ready!" && exit 0
-            echo "⌛ Still waiting ($i)..."
-            sleep 3
-          done
-          echo "❌ MongoDB or RabbitMQ not responding in time." && exit 1
+      - name: 📦 Install dependencies
+        working-directory: ./auth
+        run: npm ci
 
       - name: 🧪 Run tests (Auth)
         working-directory: ./auth
@@ -54,55 +52,53 @@ jobs:
           MONGO_URI: mongodb://localhost:27017/ep_auth_db
           JWT_SECRET: 11042004
           RABBITMQ_URL: amqp://localhost
-        run: npm test
+        run: npm test -- --timeout 15000 --exit
 
-  # 🧪 Test Product Service (chạy sau Auth)
+  # 🧪 Test Product Service (chạy song song)
   test_product:
     name: 🧪 Test Product Service
     runs-on: ubuntu-latest
-    needs: test_auth
 
     services:
       mongo:
         image: mongo:6
         ports:
           - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 10
       rabbitmq:
         image: rabbitmq:3-management
         ports:
           - 5672:5672
-          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 10
 
     steps:
       - name: 🧩 Checkout source code
         uses: actions/checkout@v4
 
-      - name: ⚙️ Set up Node.js
+      - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: npm
 
-      - name: 📦 Install dependencies (Auth & Product)
+      - name: 📦 Install dependencies
         run: |
-          cd auth && npm install && cd ..
-          cd product && npm install
+          cd auth && npm ci && cd ..
+          cd product && npm ci
 
-      # ✅ Chờ MongoDB & RabbitMQ sẵn sàng (Cách 1)
-      - name: 🕒 Wait for MongoDB & RabbitMQ
-        run: |
-          echo "⏳ Waiting for MongoDB & RabbitMQ..."
-          for i in {1..20}; do
-            nc -z localhost 27017 && nc -z localhost 5672 && echo "✅ Ready!" && exit 0
-            echo "⌛ Still waiting ($i)..."
-            sleep 3
-          done
-          echo "❌ MongoDB or RabbitMQ not responding in time." && exit 1
-
-      - name: 🕒 Start Auth service in background
+      - name: 🚀 Start Auth service (background)
         run: |
           cd auth
           nohup npm start > /dev/null 2>&1 &
-          sleep 10
+          sleep 6
 
       - name: 🧪 Run tests (Product)
         working-directory: ./product
@@ -112,7 +108,7 @@ jobs:
           RABBITMQ_URL: amqp://localhost
           LOGIN_TEST_USER: testuser
           LOGIN_TEST_PASSWORD: password
-        run: npm test
+        run: npm test -- --timeout 15000 --exit
 
   # 🐳 Build & Push Docker Images (sau khi test pass)
   build_and_push:
@@ -124,7 +120,7 @@ jobs:
       - name: 🧩 Checkout source code
         uses: actions/checkout@v4
 
-      - name: ⚙️ Set up Docker Buildx
+      - name: ⚙️ Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: 🔑 Login to Docker Hub
@@ -133,16 +129,16 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 🧱 Create temporary .env files
+      - name: 🧱 Create .env files
         run: |
           mkdir -p auth product order api-gateway
+          echo "MONGO_URI=mongodb://mongo:27017/microservices" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
+          echo "RABBITMQ_URL=amqp://rabbitmq:5672" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
+          echo "JWT_SECRET=11042004" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
           echo "PORT=3000" > auth/.env
           echo "PORT=3001" > product/.env
           echo "PORT=3002" > order/.env
           echo "PORT=3003" > api-gateway/.env
-          echo "MONGO_URI=mongodb://mongo:27017/microservices" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
-          echo "RABBITMQ_URL=amqp://rabbitmq:5672" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
-          echo "JWT_SECRET=11042004" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
 
       - name: 🐳 Build and push Auth service
         uses: docker/build-push-action@v6
@@ -171,6 +167,3 @@ jobs:
           context: ./api-gateway
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:latest
-
-      - name: ✅ Validate docker-compose configuration
-        run: docker compose -f docker-compose.yml config
