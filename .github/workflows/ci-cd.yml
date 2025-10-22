@@ -6,10 +6,10 @@ on:
   pull_request:
     branches: [main]
 
-# ======================================================================
-# 🧪 TEST STAGE
-# ======================================================================
 jobs:
+  # ======================================================================
+  # 🧪 TEST AUTH SERVICE
+  # ======================================================================
   test_auth:
     name: 🧪 Test Auth Service
     runs-on: ubuntu-latest
@@ -21,8 +21,8 @@ jobs:
           - 27017:27017
         options: >-
           --health-cmd="mongosh --eval 'db.runCommand({ ping: 1 })'"
-          --health-interval=2s
-          --health-timeout=2s
+          --health-interval=5s
+          --health-timeout=5s
           --health-retries=10
       rabbitmq:
         image: rabbitmq:3-management
@@ -30,8 +30,8 @@ jobs:
           - 5672:5672
         options: >-
           --health-cmd="rabbitmq-diagnostics -q ping"
-          --health-interval=2s
-          --health-timeout=2s
+          --health-interval=5s
+          --health-timeout=5s
           --health-retries=10
 
     steps:
@@ -48,15 +48,6 @@ jobs:
         working-directory: ./auth
         run: npm ci
 
-      - name: ⏳ Wait for MongoDB & RabbitMQ
-        run: |
-          echo "Checking MongoDB..."
-          until nc -z mongo 27017; do echo "Waiting for MongoDB..."; sleep 2; done
-          echo "✅ MongoDB ready!"
-          echo "Checking RabbitMQ..."
-          until nc -z rabbitmq 5672; do echo "Waiting for RabbitMQ..."; sleep 2; done
-          echo "✅ RabbitMQ ready!"
-
       - name: 🧪 Run Auth tests
         working-directory: ./auth
         env:
@@ -68,7 +59,7 @@ jobs:
           npm test -- --timeout 30000 --exit
 
   # ======================================================================
-  # 🧪 PRODUCT TEST
+  # 🧪 TEST PRODUCT SERVICE
   # ======================================================================
   test_product:
     name: 🧪 Test Product Service
@@ -81,8 +72,8 @@ jobs:
           - 27017:27017
         options: >-
           --health-cmd="mongosh --eval 'db.runCommand({ ping: 1 })'"
-          --health-interval=2s
-          --health-timeout=2s
+          --health-interval=5s
+          --health-timeout=5s
           --health-retries=10
       rabbitmq:
         image: rabbitmq:3-management
@@ -90,8 +81,8 @@ jobs:
           - 5672:5672
         options: >-
           --health-cmd="rabbitmq-diagnostics -q ping"
-          --health-interval=2s
-          --health-timeout=2s
+          --health-interval=5s
+          --health-timeout=5s
           --health-retries=10
 
     steps:
@@ -109,20 +100,11 @@ jobs:
           cd auth && npm ci && cd ..
           cd product && npm ci
 
-      - name: ⏳ Wait for MongoDB & RabbitMQ
-        run: |
-          echo "Checking MongoDB..."
-          until nc -z mongo 27017; do echo "Waiting for MongoDB..."; sleep 2; done
-          echo "✅ MongoDB ready!"
-          echo "Checking RabbitMQ..."
-          until nc -z rabbitmq 5672; do echo "Waiting for RabbitMQ..."; sleep 2; done
-          echo "✅ RabbitMQ ready!"
-
-      - name: 🚀 Start Auth service in background
+      - name: 🚀 Start Auth service (background)
         run: |
           cd auth
           nohup npm start > /dev/null 2>&1 &
-          sleep 6
+          sleep 8
 
       - name: 🧪 Run Product tests
         working-directory: ./product
@@ -134,9 +116,9 @@ jobs:
           echo "🚀 Running tests for Product Service"
           npm test -- --timeout 30000 --exit
 
-# ======================================================================
-# 🐳 BUILD & PUSH STAGE
-# ======================================================================
+  # ======================================================================
+  # 🐳 BUILD & PUSH STAGE
+  # ======================================================================
   build_and_push:
     name: 🐳 Build & Push Docker Images
     runs-on: ubuntu-latest
