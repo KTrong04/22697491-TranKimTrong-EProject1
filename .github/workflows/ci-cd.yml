@@ -42,16 +42,16 @@ jobs:
           node-version: 18
           cache: npm
 
-      - name: 📦 Install dependencies
+      - name: 📦 Install dependencies (Auth)
         working-directory: ./auth
         run: npm ci
 
       - name: 🧪 Run tests (Auth)
         working-directory: ./auth
         env:
-          MONGO_URI: mongodb://mongo:27017/ep_auth_db
+          MONGODB_AUTH_URI: mongodb://mongo:27017/ep_auth_db
           JWT_SECRET: 11042004
-          RABBITMQ_URL: amqp://rabbitmq
+          RABBITMQ_URI: amqp://rabbitmq
         run: npm test -- --timeout 15000 --exit
 
   # 🧪 Test Product Service (chạy song song)
@@ -103,14 +103,14 @@ jobs:
       - name: 🧪 Run tests (Product)
         working-directory: ./product
         env:
-          MONGO_URI: mongodb://mongo:27017/ep_product_db
+          MONGODB_PRODUCT_URI: mongodb://mongo:27017/ep_product_db
           JWT_SECRET: 11042004
-          RABBITMQ_URL: amqp://rabbitmq
+          RABBITMQ_URI: amqp://rabbitmq
           LOGIN_TEST_USER: testuser
           LOGIN_TEST_PASSWORD: password
         run: npm test -- --timeout 15000 --exit
 
-  # 🐳 Build & Push Docker Images (sau khi test pass)
+  # 🐳 Build & Push Docker Images (chỉ chạy nếu test pass)
   build_and_push:
     name: 🐳 Build & Push Docker Images
     runs-on: ubuntu-latest
@@ -132,38 +132,43 @@ jobs:
       - name: 🧱 Create .env files
         run: |
           mkdir -p auth product order api-gateway
-          echo "MONGO_URI=mongodb://mongo:27017/microservices" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
-          echo "RABBITMQ_URL=amqp://rabbitmq:5672" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
+          echo "MONGODB_AUTH_URI=mongodb://mongo:27017/ep_auth_db" > auth/.env
+          echo "MONGODB_PRODUCT_URI=mongodb://mongo:27017/ep_product_db" > product/.env
+          echo "MONGODB_ORDER_URI=mongodb://mongo:27017/ep_order_db" > order/.env
+          echo "RABBITMQ_URI=amqp://rabbitmq:5672" | tee -a auth/.env product/.env order/.env > /dev/null
           echo "JWT_SECRET=11042004" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
-          echo "PORT=3000" > auth/.env
-          echo "PORT=3001" > product/.env
-          echo "PORT=3002" > order/.env
-          echo "PORT=3003" > api-gateway/.env
+          echo "PORT=3000" >> auth/.env
+          echo "PORT=3001" >> product/.env
+          echo "PORT=3002" >> order/.env
+          echo "PORT=3003" >> api-gateway/.env
 
-      - name: 🐳 Build and push Auth service
+      - name: 🐳 Build & Push Auth service
         uses: docker/build-push-action@v6
         with:
           context: ./auth
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/auth-service:latest
 
-      - name: 🐳 Build and push Product service
+      - name: 🐳 Build & Push Product service
         uses: docker/build-push-action@v6
         with:
           context: ./product
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/product-service:latest
 
-      - name: 🐳 Build and push Order service
+      - name: 🐳 Build & Push Order service
         uses: docker/build-push-action@v6
         with:
           context: ./order
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/order-service:latest
 
-      - name: 🐳 Build and push API Gateway
+      - name: 🐳 Build & Push API Gateway
         uses: docker/build-push-action@v6
         with:
           context: ./api-gateway
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:latest
+
+      - name: ✅ Validate docker-compose.yml
+        run: docker compose -f docker-compose.yml config
