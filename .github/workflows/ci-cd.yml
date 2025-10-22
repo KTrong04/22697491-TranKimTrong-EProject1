@@ -39,18 +39,18 @@ jobs:
 
       - name: 🕒 Wait for MongoDB & RabbitMQ
         run: |
-          echo "Waiting for MongoDB & RabbitMQ..."
-          for i in {1..15}; do
-            nc -z localhost 27017 && nc -z localhost 5672 && echo "✅ Ready!" && break
-            sleep 2
+          echo "⏳ Waiting for MongoDB & RabbitMQ..."
+          for i in {1..20}; do
+            nc -z mongo 27017 && nc -z rabbitmq 5672 && echo "✅ Ready!" && break
+            sleep 3
           done
 
       - name: 🧪 Run tests (Auth)
         working-directory: ./auth
         env:
-          MONGODB_AUTH_URI: mongodb://localhost:27017/ep_auth_db
+          MONGODB_AUTH_URI: mongodb://mongo:27017/ep_auth_db
           JWT_SECRET: 11042004
-          RABBITMQ_URI: amqp://localhost
+          RABBITMQ_URI: amqp://rabbitmq
         run: npm test
 
   # 🧪 Test Product Service (chạy sau Auth)
@@ -87,23 +87,23 @@ jobs:
       - name: 🕒 Start Auth service in background
         run: |
           cd auth
-          nohup npm start &
-          sleep 10  # đợi auth service khởi động
+          nohup npm start > /dev/null 2>&1 &
+          sleep 10
 
       - name: 🕒 Wait for MongoDB & RabbitMQ
         run: |
-          echo "Waiting for MongoDB & RabbitMQ..."
-          for i in {1..15}; do
-            nc -z localhost 27017 && nc -z localhost 5672 && echo "✅ Ready!" && break
-            sleep 2
+          echo "⏳ Waiting for MongoDB & RabbitMQ..."
+          for i in {1..20}; do
+            nc -z mongo 27017 && nc -z rabbitmq 5672 && echo "✅ Ready!" && break
+            sleep 3
           done
 
       - name: 🧪 Run tests (Product)
         working-directory: ./product
         env:
-          MONGODB_PRODUCT_URI: mongodb://localhost:27017/ep_product_db
+          MONGODB_PRODUCT_URI: mongodb://mongo:27017/ep_product_db
           JWT_SECRET: 11042004
-          RABBITMQ_URI: amqp://localhost
+          RABBITMQ_URI: amqp://rabbitmq
           LOGIN_TEST_USER: testuser
           LOGIN_TEST_PASSWORD: password
         run: npm test
@@ -147,6 +147,7 @@ jobs:
           echo "PORT=3003" > api-gateway/.env
           echo "MONGO_URI=mongodb://mongo:27017/microservices" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
           echo "RABBITMQ_URL=amqp://rabbitmq:5672" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
+          echo "JWT_SECRET=11042004" | tee -a auth/.env product/.env order/.env api-gateway/.env > /dev/null
 
       - name: 🐳 Build and push Auth service
         uses: docker/build-push-action@v6
