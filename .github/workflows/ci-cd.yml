@@ -37,20 +37,23 @@ jobs:
           cd auth
           npm install
 
+      # ✅ Chờ MongoDB & RabbitMQ sẵn sàng (Cách 1)
       - name: 🕒 Wait for MongoDB & RabbitMQ
         run: |
           echo "⏳ Waiting for MongoDB & RabbitMQ..."
           for i in {1..20}; do
-            nc -z mongo 27017 && nc -z rabbitmq 5672 && echo "✅ Ready!" && break
+            nc -z localhost 27017 && nc -z localhost 5672 && echo "✅ Ready!" && exit 0
+            echo "⌛ Still waiting ($i)..."
             sleep 3
           done
+          echo "❌ MongoDB or RabbitMQ not responding in time." && exit 1
 
       - name: 🧪 Run tests (Auth)
         working-directory: ./auth
         env:
-          MONGODB_AUTH_URI: mongodb://mongo:27017/ep_auth_db
+          MONGO_URI: mongodb://localhost:27017/ep_auth_db
           JWT_SECRET: 11042004
-          RABBITMQ_URI: amqp://rabbitmq
+          RABBITMQ_URL: amqp://localhost
         run: npm test
 
   # 🧪 Test Product Service (chạy sau Auth)
@@ -84,26 +87,29 @@ jobs:
           cd auth && npm install && cd ..
           cd product && npm install
 
+      # ✅ Chờ MongoDB & RabbitMQ sẵn sàng (Cách 1)
+      - name: 🕒 Wait for MongoDB & RabbitMQ
+        run: |
+          echo "⏳ Waiting for MongoDB & RabbitMQ..."
+          for i in {1..20}; do
+            nc -z localhost 27017 && nc -z localhost 5672 && echo "✅ Ready!" && exit 0
+            echo "⌛ Still waiting ($i)..."
+            sleep 3
+          done
+          echo "❌ MongoDB or RabbitMQ not responding in time." && exit 1
+
       - name: 🕒 Start Auth service in background
         run: |
           cd auth
           nohup npm start > /dev/null 2>&1 &
           sleep 10
 
-      - name: 🕒 Wait for MongoDB & RabbitMQ
-        run: |
-          echo "⏳ Waiting for MongoDB & RabbitMQ..."
-          for i in {1..20}; do
-            nc -z mongo 27017 && nc -z rabbitmq 5672 && echo "✅ Ready!" && break
-            sleep 3
-          done
-
       - name: 🧪 Run tests (Product)
         working-directory: ./product
         env:
-          MONGODB_PRODUCT_URI: mongodb://mongo:27017/ep_product_db
+          MONGO_URI: mongodb://localhost:27017/ep_product_db
           JWT_SECRET: 11042004
-          RABBITMQ_URI: amqp://rabbitmq
+          RABBITMQ_URL: amqp://localhost
           LOGIN_TEST_USER: testuser
           LOGIN_TEST_PASSWORD: password
         run: npm test
@@ -113,17 +119,6 @@ jobs:
     name: 🐳 Build & Push Docker Images
     runs-on: ubuntu-latest
     needs: [test_auth, test_product]
-
-    services:
-      mongo:
-        image: mongo:6
-        ports:
-          - 27017:27017
-      rabbitmq:
-        image: rabbitmq:3-management
-        ports:
-          - 5672:5672
-          - 15672:15672
 
     steps:
       - name: 🧩 Checkout source code
